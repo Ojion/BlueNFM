@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Tracker</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --text-main: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --accent-blue: #3b82f6;
+            --accent-dark-blue: #1e3a8a;
+            --progress-bg: #333;
+            --success-green: #10b981;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding-bottom: 120px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 { margin-bottom: 20px; font-size: 1.5rem; text-align: center; color: var(--accent-blue); }
+        h2 { font-size: 1.1rem; margin-top: 30px; margin-bottom: 15px; color: var(--text-muted); border-bottom: 1px solid #333; padding-bottom: 5px;}
+
+        /* Simulation Section */
+        .sim-box {
+            background-color: var(--card-bg);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #333;
+        }
+        .sim-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .sim-row:last-child { margin-bottom: 0; }
+        
+        input {
+            background: #2a2a2a;
+            border: 1px solid #444;
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            width: 100%;
+            font-size: 14px;
+        }
+        input:focus { outline: 2px solid var(--accent-blue); border-color: transparent; }
+
+        /* Item List */
+        .item-card {
+            background-color: var(--card-bg);
+            margin-bottom: 15px;
+            padding: 15px;
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            position: relative;
+            z-index: 2;
+        }
+        
+        .item-name { font-weight: 600; font-size: 1.1rem; }
+        .item-date { font-size: 0.8rem; color: var(--text-muted); display: block; margin-top: 4px;}
+        .item-amount { font-weight: 700; color: var(--accent-blue); }
+        .item-status { font-size: 0.85rem; color: var(--text-muted); z-index: 2; position: relative; }
+
+        .progress-container {
+            height: 6px;
+            background-color: var(--progress-bg);
+            border-radius: 3px;
+            margin-top: 10px;
+            overflow: hidden;
+            position: relative;
+            z-index: 2;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-dark-blue), var(--accent-blue));
+            width: 0%;
+            transition: width 0.5s ease-out;
+        }
+
+        .fully-paid .progress-fill { background: var(--success-green); }
+        .fully-paid .item-amount { color: var(--success-green); }
+
+        /* Payment History List */
+        .history-list {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .history-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 15px;
+            border-bottom: 1px solid #333;
+            font-size: 0.9rem;
+        }
+        .history-row:last-child { border-bottom: none; }
+        .history-date { color: var(--text-muted); }
+        .history-amount { font-weight: 600; color: var(--text-main); }
+
+        .sticky-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: #1a1a1a;
+            border-top: 1px solid #333;
+            padding: 15px 20px;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.5);
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 600px; 
+            margin: 0 auto; 
+        }
+        @media (min-width: 600px) {
+            .sticky-footer { left: 50%; transform: translateX(-50%); width: 100%; border-radius: 12px 12px 0 0; }
+        }
+
+        .stat-block { text-align: center; }
+        .stat-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-value { font-size: 1.2rem; font-weight: 700; color: white; }
+        .stat-sub { font-size: 0.8rem; color: var(--accent-blue); }
+
+        .loading { text-align: center; margin-top: 50px; color: var(--text-muted); }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Payment Tracker</h1>
+
+        <h2>Simulator</h2>
+        <div class="sim-box">
+            <div style="font-size: 0.85rem; color: #888; margin-bottom: 10px;">Test adding payments (not saved):</div>
+            <div class="sim-row">
+                <input type="text" placeholder="Date (Optional)" id="simDate1">
+                <input type="number" placeholder="Amount ($)" id="simAmount1" oninput="recalculate()">
+            </div>
+            <div class="sim-row">
+                <input type="text" placeholder="Date (Optional)" id="simDate2">
+                <input type="number" placeholder="Amount ($)" id="simAmount2" oninput="recalculate()">
+            </div>
+        </div>
+
+        <h2>Items Purchased</h2>
+        <div id="items-list">
+            <div class="loading">Loading data...</div>
+        </div>
+
+        <h2>Payment History</h2>
+        <div class="history-list" id="payment-history-list">
+            <div style="padding:15px; color:#666; font-size:0.9rem;">No payments recorded yet.</div>
+        </div>
+    </div>
+
+    <div class="sticky-footer">
+        <div class="stat-block" style="text-align: left;">
+            <div class="stat-label">Total Paid</div>
+            <div class="stat-value" id="footer-paid">$0</div>
+            <div class="stat-sub">of <span id="footer-total">$0</span></div>
+        </div>
+        <div class="stat-block" style="text-align: right;">
+            <div class="stat-label">Remaining</div>
+            <div class="stat-value" id="footer-remaining">24</div>
+            <div class="stat-sub">payments</div>
+        </div>
+    </div>
+
+    <script>
+        // CONFIGURATION
+        const ITEMS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRU_1bHMbutl3GaJsxj2PTCUPUFLWtgJKhnkI8OsVAUQpMvk2ULG-vl5BDReNPnL8vaskrP0UcCg45R/pub?gid=1526866472&single=true&output=csv';
+        const PAYMENTS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRU_1bHMbutl3GaJsxj2PTCUPUFLWtgJKhnkI8OsVAUQpMvk2ULG-vl5BDReNPnL8vaskrP0UcCg45R/pub?gid=1740645095&single=true&output=csv';
+
+        let rawItems = [];
+        let rawPayments = [];
+        const TOTAL_PAYMENTS_PLAN = 24;
+
+        function cleanCurrency(val) {
+            if (!val) return 0;
+            return parseFloat(val.toString().replace(/[$,\s]/g, '')) || 0;
+        }
+
+        function init() {
+            Papa.parse(ITEMS_CSV_URL, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    if (results.data.length > 0) {
+                        rawItems = results.data;
+                        checkDataLoaded();
+                    } else {
+                        console.error("Items CSV loaded but empty.");
+                    }
+                },
+                error: function(err) {
+                    console.error("Error loading Items CSV: " + err.message);
+                }
+            });
+
+            Papa.parse(PAYMENTS_CSV_URL, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    if (results.data.length > 0) {
+                        rawPayments = results.data;
+                        checkDataLoaded();
+                    } else {
+                        console.error("Payments CSV loaded but empty.");
+                    }
+                },
+                error: function(err) {
+                    console.error("Error loading Payments CSV: " + err.message);
+                }
+            });
+        }
+
+        function checkDataLoaded() {
+            if (rawItems.length > 0 && rawPayments.length > 0) {
+                recalculate();
+            }
+        }
+
+        function recalculate() {
+            let totalCash = 0;
+            let paymentCount = 0;
+            let validPayments = [];
+
+            // 1. Calculate Real Payments & Build History
+            rawPayments.forEach(p => {
+                let paidKey = Object.keys(p).find(k => k.toLowerCase().trim() === 'paid');
+                let dateKey = Object.keys(p).find(k => k.toLowerCase().trim() === 'date');
+                
+                if (paidKey) {
+                    let amount = cleanCurrency(p[paidKey]);
+                    let date = dateKey ? p[dateKey] : 'Unknown Date';
+
+                    if(amount > 0) {
+                        totalCash += amount;
+                        paymentCount++;
+                        validPayments.push({ date: date, amount: amount });
+                    }
+                }
+            });
+
+            // Render Payment History
+            const historyContainer = document.getElementById('payment-history-list');
+            if (validPayments.length > 0) {
+                historyContainer.innerHTML = '';
+                validPayments.forEach(vp => {
+                    const row = document.createElement('div');
+                    row.className = 'history-row';
+                    row.innerHTML = `
+                        <span class="history-date">${vp.date}</span>
+                        <span class="history-amount">$${vp.amount.toLocaleString()}</span>
+                    `;
+                    historyContainer.appendChild(row);
+                });
+            } else {
+                historyContainer.innerHTML = '<div style="padding:15px; color:#666; font-size:0.9rem;">No payments recorded yet.</div>';
+            }
+
+            // 2. Add Simulated Payments
+            const sim1 = cleanCurrency(document.getElementById('simAmount1').value);
+            const sim2 = cleanCurrency(document.getElementById('simAmount2').value);
+            totalCash += (sim1 + sim2);
+            if(sim1 > 0) paymentCount++;
+            if(sim2 > 0) paymentCount++;
+
+            // 3. Render Items
+            const container = document.getElementById('items-list');
+            container.innerHTML = '';
+            
+            let cashRemaining = totalCash;
+            let grandTotalCost = 0;
+
+            rawItems.forEach(item => {
+                let nameKey = Object.keys(item).find(k => k.toLowerCase().trim() === 'item');
+                let dateKey = Object.keys(item).find(k => k.toLowerCase().trim() === 'purchased');
+                let amountKey = Object.keys(item).find(k => k.toLowerCase().trim() === 'amount');
+
+                if (!nameKey || !amountKey) return; 
+
+                let name = item[nameKey];
+                let date = item[dateKey] || '';
+                let cost = cleanCurrency(item[amountKey]);
+                
+                grandTotalCost += cost;
+
+                let paidTowardThis = 0;
+                if (cashRemaining >= cost) {
+                    paidTowardThis = cost;
+                    cashRemaining -= cost;
+                } else if (cashRemaining > 0) {
+                    paidTowardThis = cashRemaining;
+                    cashRemaining = 0;
+                }
+
+                let percent = cost > 0 ? (paidTowardThis / cost) * 100 : 0;
+                let isFullyPaid = percent >= 99.9;
+
+                const div = document.createElement('div');
+                div.className = `item-card ${isFullyPaid ? 'fully-paid' : ''}`;
+                div.innerHTML = `
+                    <div class="item-header">
+                        <div>
+                            <div class="item-name">${name}</div>
+                            <span class="item-date">${date}</span>
+                        </div>
+                        <div class="item-amount">$${cost.toLocaleString()}</div>
+                    </div>
+                    <div class="item-status">
+                        ${isFullyPaid ? 'Paid in full' : `$${paidTowardThis.toLocaleString()} paid`}
+                    </div>
+                    <div class="progress-container">
+                        <div class="progress-fill" style="width: ${percent}%"></div>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+
+            document.getElementById('footer-paid').innerText = '$' + totalCash.toLocaleString();
+            document.getElementById('footer-total').innerText = '$' + grandTotalCost.toLocaleString();
+            let paymentsLeft = Math.max(0, TOTAL_PAYMENTS_PLAN - paymentCount);
+            document.getElementById('footer-remaining').innerText = paymentsLeft;
+        }
+
+        init();
+    </script>
+</body>
+</html>
