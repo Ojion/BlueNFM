@@ -34,7 +34,30 @@
         }
 
         h1 { margin-bottom: 20px; font-size: 1.5rem; text-align: center; color: var(--accent-blue); }
-        h2 { font-size: 1.1rem; margin-top: 30px; margin-bottom: 15px; color: var(--text-muted); border-bottom: 1px solid #333; padding-bottom: 5px;}
+        
+        h2 { 
+            font-size: 1.1rem; 
+            margin-top: 30px; 
+            margin-bottom: 15px; 
+            color: var(--text-muted); 
+            border-bottom: 1px solid #333; 
+            padding-bottom: 5px;
+        }
+
+        /* Collapsible Toggle Styling */
+        .toggle-header {
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+        }
+        .toggle-header:hover { color: var(--text-main); }
+        .arrow-icon {
+            font-size: 0.8rem;
+            transition: transform 0.3s ease;
+        }
+        .arrow-icon.open { transform: rotate(180deg); }
 
         /* Simulation Section */
         .sim-box {
@@ -43,6 +66,7 @@
             border-radius: 8px;
             margin-bottom: 20px;
             border: 1px solid #333;
+            display: none; /* Default Hidden */
         }
         .sim-row {
             display: flex;
@@ -131,11 +155,11 @@
             right: 0;
             background-color: #1a1a1a;
             border-top: 1px solid #333;
-            padding: 15px 10px; /* Reduced side padding to fit 3 items */
+            padding: 15px 10px;
             box-shadow: 0 -4px 20px rgba(0,0,0,0.5);
             z-index: 100;
             display: grid;
-            grid-template-columns: 1fr 1fr 1fr; /* 3 equal columns */
+            grid-template-columns: 1fr 1fr 1fr; 
             align-items: center;
             max-width: 600px; 
             margin: 0 auto; 
@@ -157,8 +181,11 @@
     <div class="container">
         <h1>Payment Tracker</h1>
 
-        <h2>Simulator</h2>
-        <div class="sim-box">
+        <h2 class="toggle-header" onclick="toggleSim()">
+            Simulator <span class="arrow-icon">▼</span>
+        </h2>
+        
+        <div class="sim-box" id="sim-box">
             <div style="font-size: 0.85rem; color: #888; margin-bottom: 10px;">Test adding payments (not saved):</div>
             <div class="sim-row">
                 <input type="text" placeholder="Date (Optional)" id="simDate1">
@@ -209,6 +236,19 @@
         let rawItems = [];
         let rawPayments = [];
         const TOTAL_PAYMENTS_PLAN = 24;
+
+        function toggleSim() {
+            const box = document.getElementById('sim-box');
+            const arrow = document.querySelector('.arrow-icon');
+            
+            if (box.style.display === 'block') {
+                box.style.display = 'none';
+                arrow.classList.remove('open');
+            } else {
+                box.style.display = 'block';
+                arrow.classList.add('open');
+            }
+        }
 
         function cleanCurrency(val) {
             if (!val) return 0;
