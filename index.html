@@ -223,8 +223,8 @@
 
         <div class="stat-block" style="text-align: right;">
             <div class="stat-label">Remaining</div>
-            <div class="stat-value" id="footer-remaining">24</div>
-            <div class="stat-sub">payments</div>
+            <div class="stat-value" id="footer-balance">$0</div>
+            <div class="stat-sub"><span id="footer-remaining">0</span> payments left</div>
         </div>
     </div>
 
@@ -404,6 +404,10 @@
 
             // Calculate Amount Due
             let amountLeft = Math.max(0, grandTotalCost - totalCash);
+
+            // Update the remaining balance display
+            document.getElementById('footer-balance').innerText = '$' + amountLeft.toLocaleString();
+            
             let avgDue = 0;
             if(paymentsLeft > 0 && amountLeft > 0) {
                 avgDue = Math.ceil(amountLeft / paymentsLeft);
@@ -415,5 +419,6 @@
     </script>
 </body>
 </html>
+
 
 
