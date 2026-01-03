@@ -235,7 +235,7 @@
 
         let rawItems = [];
         let rawPayments = [];
-        const TOTAL_PAYMENTS_PLAN = 25;
+        let totalPaymentsPlan = 24; // Default fallback if sheet is empty
 
         function toggleSim() {
             const box = document.getElementById('sim-box');
@@ -263,6 +263,21 @@
                 complete: function(results) {
                     if (results.data.length > 0) {
                         rawItems = results.data;
+                        // Look at the first row (index 0) to find the total payments value
+                        const firstRow = results.data[0];
+                        
+                        // Find key case-insensitively (e.g., 'TotalPayments', 'totalpayments')
+                        const totalKey = Object.keys(firstRow).find(k => 
+                            k.toLowerCase().trim().replace(/\s/g, '') === 'totalpayments'
+                        );
+
+                        if (totalKey && firstRow[totalKey]) {
+                            const sheetTotal = parseInt(firstRow[totalKey], 10);
+                            if (!isNaN(sheetTotal) && sheetTotal > 0) {
+                                totalPaymentsPlan = sheetTotal;
+                            }
+                        }
+                        
                         checkDataLoaded();
                     } else {
                         console.error("Items CSV loaded but empty.");
@@ -399,7 +414,7 @@
             document.getElementById('footer-paid').innerText = '$' + totalCash.toLocaleString();
             document.getElementById('footer-total').innerText = '$' + grandTotalCost.toLocaleString();
             
-            let paymentsLeft = Math.max(0, TOTAL_PAYMENTS_PLAN - paymentCount);
+            let paymentsLeft = Math.max(0, totalPaymentsPlan - paymentCount);
             document.getElementById('footer-remaining').innerText = paymentsLeft;
 
             // Calculate Amount Due
@@ -419,6 +434,7 @@
     </script>
 </body>
 </html>
+
 
 
 
