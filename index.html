@@ -263,21 +263,6 @@
                 complete: function(results) {
                     if (results.data.length > 0) {
                         rawItems = results.data;
-                        // Look at the first row (index 0) to find the total payments value
-                        const firstRow = results.data[0];
-                        
-                        // Find key case-insensitively (e.g., 'TotalPayments', 'totalpayments')
-                        const totalKey = Object.keys(firstRow).find(k => 
-                            k.toLowerCase().trim().replace(/\s/g, '') === 'totalpayments'
-                        );
-
-                        if (totalKey && firstRow[totalKey]) {
-                            const sheetTotal = parseInt(firstRow[totalKey], 10);
-                            if (!isNaN(sheetTotal) && sheetTotal > 0) {
-                                totalPaymentsPlan = sheetTotal;
-                            }
-                        }
-                        
                         checkDataLoaded();
                     } else {
                         console.error("Items CSV loaded but empty.");
@@ -295,6 +280,20 @@
                 complete: function(results) {
                     if (results.data.length > 0) {
                         rawPayments = results.data;
+                        // Look at the first row (index 0) to find the total payments value
+                        const firstRow = results.data[0];
+                        
+                        // Find key case-insensitively (e.g., 'TotalPayments', 'totalpayments')
+                        const totalKey = Object.keys(firstRow).find(k => 
+                            k.toLowerCase().trim().replace(/\s/g, '') === 'totalpayments'
+                        );
+
+                        if (totalKey && firstRow[totalKey]) {
+                            const sheetTotal = parseInt(firstRow[totalKey], 10);
+                            if (!isNaN(sheetTotal) && sheetTotal > 0) {
+                                totalPaymentsPlan = sheetTotal;
+                            }
+                        }
                         checkDataLoaded();
                     } else {
                         console.error("Payments CSV loaded but empty.");
@@ -434,6 +433,7 @@
     </script>
 </body>
 </html>
+
 
 
 
