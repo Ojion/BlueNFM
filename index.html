@@ -311,7 +311,7 @@
                     let amount = cleanCurrency(p[paidKey]);
                     let date = dateKey ? p[dateKey] : 'Unknown Date';
 
-                    if(amount >= 0 && date.trim() !== '') {
+                    if(amount >= 0 && date && date.trim() !== '') {
                         totalCash += amount;
                         paymentCount++;
                         validPayments.push({ date: date, amount: amount });
@@ -415,4 +415,5 @@
     </script>
 </body>
 </html>
+
 
