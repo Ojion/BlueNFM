@@ -257,6 +257,7 @@
         let rawItems = [];
         let rawPayments = [];
         let totalPaymentsPlan = 24;
+        let agreedPaymentAmount = 0;
 
         function getNextPayday() {
             const baseDate = new Date(2026, 1, 27); // Feb 27, 2026
@@ -340,6 +341,18 @@
                                 totalPaymentsPlan = sheetTotal;
                             }
                         }
+
+                        const agreedKey = Object.keys(firstRow).find(k => 
+                            k.toLowerCase().trim().replace(/\s/g, '') === 'agreedpaymentamount'
+                        );
+
+                        if (agreedKey && firstRow[agreedKey]) {
+                            const sheetAgreed = cleanCurrency(firstRow[agreedKey]);
+                            if (sheetAgreed > 0) {
+                                agreedPaymentAmount = sheetAgreed;
+                            }
+                        }
+
                         checkDataLoaded();
                     } else {
                         console.error("Payments CSV loaded but empty.");
@@ -356,6 +369,116 @@
                 recalculate();
                 runSimulator();
             }
+        }
+
+        function calculateSimulation(inputVal) {
+            let historyEscrow = 0;
+            rawPayments.forEach(p => {
+                let paidKey = Object.keys(p).find(k => k.toLowerCase().trim() === 'paid');
+                let dateKey = Object.keys(p).find(k => k.toLowerCase().trim() === 'date');
+                if (paidKey) {
+                    let amount = cleanCurrency(p[paidKey]);
+                    let d = dateKey ? p[dateKey] : '';
+                    if (amount >= 0 && d.trim() !== '') {
+                        historyEscrow += amount;
+                    }
+                }
+            });
+
+            const sim1 = cleanCurrency(document.getElementById('simAmount1').value);
+            historyEscrow += sim1;
+
+            let items = rawItems.map(item => {
+                let nameKey = Object.keys(item).find(k => k.toLowerCase().trim() === 'item');
+                let dateKey = Object.keys(item).find(k => k.toLowerCase().trim() === 'purchased');
+                let amountKey = Object.keys(item).find(k => k.toLowerCase().trim() === 'amount');
+                
+                let name = item[nameKey] || 'Unknown';
+                let pDateStr = item[dateKey] || '';
+                let cost = cleanCurrency(item[amountKey]);
+                
+                let pDate = new Date(pDateStr);
+                let startMonth = pDate.getMonth() + 1; 
+                let startYear = pDate.getFullYear();
+                if (startMonth > 11) { startMonth = 0; startYear++; }
+                let promoStart = new Date(startYear, startMonth, 2);
+                
+                let isLaptop = name.toLowerCase().includes('laptop');
+                let endMonth = startMonth + (isLaptop ? 6 : 0); 
+                let endYear = startYear + (isLaptop ? 1 : 1);
+                if (endMonth > 11) { endMonth -= 12; endYear++; }
+                let promoEnd = new Date(endYear, endMonth, 2);
+
+                return {
+                    name, cost, balance: cost, promoStart, promoEnd,
+                    deferredInterest: 0, backInterestApplied: false, isPaid: false
+                };
+            });
+
+            items.sort((a, b) => {
+                if (a.promoEnd.getTime() !== b.promoEnd.getTime()) return a.promoEnd.getTime() - b.promoEnd.getTime();
+                return a.cost - b.cost;
+            });
+
+            let currentEscrow = historyEscrow;
+            for (let i of items) {
+                if (currentEscrow >= i.cost) {
+                    currentEscrow -= i.cost;
+                    i.isPaid = true;
+                    i.balance = 0;
+                }
+            }
+            let remainingItems = items.filter(i => !i.isPaid);
+
+            let simStartDate = getNextPayday();
+            let earliestPromoStart = remainingItems.length > 0 ? new Date(Math.min(...remainingItems.map(i => i.promoStart))) : simStartDate;
+            
+            let loopDate = new Date(simStartDate);
+            while (loopDate > earliestPromoStart) {
+                loopDate.setDate(loopDate.getDate() - 14);
+            }
+
+            let totalInterestPaid = 0;
+            let paymentsMade = 0;
+            let biWeeklyRate = 0.18 / 26;
+            let failsafe = 0;
+
+            while (remainingItems.length > 0 && failsafe < 2000) {
+                failsafe++;
+                
+                if (loopDate >= simStartDate) {
+                    currentEscrow += inputVal;
+                    paymentsMade++;
+                }
+
+                for (let i of remainingItems) {
+                    if (loopDate >= i.promoStart) {
+                        if (loopDate <= i.promoEnd) {
+                            i.deferredInterest += i.balance * biWeeklyRate;
+                        } else {
+                            if (!i.backInterestApplied) {
+                                i.balance += i.deferredInterest;
+                                totalInterestPaid += i.deferredInterest;
+                                i.backInterestApplied = true;
+                            }
+                            let newInterest = i.balance * biWeeklyRate;
+                            i.balance += newInterest;
+                            totalInterestPaid += newInterest;
+                        }
+                    }
+                }
+
+                while (remainingItems.length > 0 && currentEscrow >= remainingItems[0].balance) {
+                    currentEscrow -= remainingItems[0].balance;
+                    remainingItems.shift(); 
+                }
+
+                if (remainingItems.length > 0) {
+                    loopDate.setDate(loopDate.getDate() + 14);
+                }
+            }
+
+            return { paymentsMade, totalInterestPaid, loopDate, remainingItemsLength: remainingItems.length };
         }
 
         function recalculate() {
@@ -454,20 +577,32 @@
             });
 
             // 4. Update Sticky Footer
-            document.getElementById('footer-paid').innerText = '$' + totalCash.toLocaleString();
-            document.getElementById('footer-total').innerText = '$' + grandTotalCost.toLocaleString();
+            document.getElementById('footer-paid').innerText = '$' + totalCash.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2});
             
-            let paymentsLeft = Math.max(0, totalPaymentsPlan - paymentCount);
-            document.getElementById('footer-remaining').innerText = paymentsLeft;
+            if (agreedPaymentAmount > 0) {
+                let sim = calculateSimulation(agreedPaymentAmount);
+                let totalWithInterest = grandTotalCost + sim.totalInterestPaid;
+                let amountLeft = Math.max(0, totalWithInterest - totalCash);
+                
+                document.getElementById('footer-total').innerText = '$' + totalWithInterest.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2});
+                document.getElementById('footer-remaining').innerText = sim.paymentsMade;
+                document.getElementById('footer-balance').innerText = '$' + amountLeft.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2});
+                document.getElementById('footer-due').innerText = '$' + agreedPaymentAmount.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2});
+            } else {
+                document.getElementById('footer-total').innerText = '$' + grandTotalCost.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2});
+                
+                let paymentsLeft = Math.max(0, totalPaymentsPlan - paymentCount);
+                document.getElementById('footer-remaining').innerText = paymentsLeft;
 
-            let amountLeft = Math.max(0, grandTotalCost - totalCash);
-            document.getElementById('footer-balance').innerText = '$' + amountLeft.toLocaleString();
-            
-            let avgDue = 0;
-            if(paymentsLeft > 0 && amountLeft > 0) {
-                avgDue = Math.ceil(amountLeft / paymentsLeft);
+                let amountLeft = Math.max(0, grandTotalCost - totalCash);
+                document.getElementById('footer-balance').innerText = '$' + amountLeft.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2});
+                
+                let avgDue = 0;
+                if(paymentsLeft > 0 && amountLeft > 0) {
+                    avgDue = Math.ceil(amountLeft / paymentsLeft);
+                }
+                document.getElementById('footer-due').innerText = '$' + avgDue.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2});
             }
-            document.getElementById('footer-due').innerText = '$' + avgDue.toLocaleString();
         }
 
         function runSimulator() {
@@ -480,112 +615,11 @@
             }
             resultsBox.style.display = 'block';
 
-            let historyEscrow = 0;
-            rawPayments.forEach(p => {
-                let paidKey = Object.keys(p).find(k => k.toLowerCase().trim() === 'paid');
-                let dateKey = Object.keys(p).find(k => k.toLowerCase().trim() === 'date');
-                if (paidKey) {
-                    let amount = cleanCurrency(p[paidKey]);
-                    let d = dateKey ? p[dateKey] : '';
-                    if (amount >= 0 && d.trim() !== '') {
-                        historyEscrow += amount;
-                    }
-                }
-            });
+            const sim = calculateSimulation(inputVal);
 
-            let items = rawItems.map(item => {
-                let nameKey = Object.keys(item).find(k => k.toLowerCase().trim() === 'item');
-                let dateKey = Object.keys(item).find(k => k.toLowerCase().trim() === 'purchased');
-                let amountKey = Object.keys(item).find(k => k.toLowerCase().trim() === 'amount');
-                
-                let name = item[nameKey] || 'Unknown';
-                let pDateStr = item[dateKey] || '';
-                let cost = cleanCurrency(item[amountKey]);
-                
-                let pDate = new Date(pDateStr);
-                let startMonth = pDate.getMonth() + 1; 
-                let startYear = pDate.getFullYear();
-                if (startMonth > 11) { startMonth = 0; startYear++; }
-                let promoStart = new Date(startYear, startMonth, 2);
-                
-                let isLaptop = name.toLowerCase().includes('laptop');
-                let endMonth = startMonth + (isLaptop ? 6 : 0); 
-                let endYear = startYear + (isLaptop ? 1 : 1);
-                if (endMonth > 11) { endMonth -= 12; endYear++; }
-                let promoEnd = new Date(endYear, endMonth, 2);
-
-                return {
-                    name, cost, balance: cost, promoStart, promoEnd,
-                    deferredInterest: 0, backInterestApplied: false, isPaid: false
-                };
-            });
-
-            items.sort((a, b) => {
-                if (a.promoEnd.getTime() !== b.promoEnd.getTime()) return a.promoEnd.getTime() - b.promoEnd.getTime();
-                return a.cost - b.cost;
-            });
-
-            let currentEscrow = historyEscrow;
-            for (let i of items) {
-                if (currentEscrow >= i.cost) {
-                    currentEscrow -= i.cost;
-                    i.isPaid = true;
-                    i.balance = 0;
-                }
-            }
-            let remainingItems = items.filter(i => !i.isPaid);
-
-            let simStartDate = getNextPayday();
-            let earliestPromoStart = remainingItems.length > 0 ? new Date(Math.min(...remainingItems.map(i => i.promoStart))) : simStartDate;
-            
-            let loopDate = new Date(simStartDate);
-            while (loopDate > earliestPromoStart) {
-                loopDate.setDate(loopDate.getDate() - 14);
-            }
-
-            let totalInterestPaid = 0;
-            let paymentsMade = 0;
-            let biWeeklyRate = 0.18 / 26;
-            let failsafe = 0;
-
-            while (remainingItems.length > 0 && failsafe < 2000) {
-                failsafe++;
-                
-                if (loopDate >= simStartDate) {
-                    currentEscrow += inputVal;
-                    paymentsMade++;
-                }
-
-                for (let i of remainingItems) {
-                    if (loopDate >= i.promoStart) {
-                        if (loopDate <= i.promoEnd) {
-                            i.deferredInterest += i.balance * biWeeklyRate;
-                        } else {
-                            if (!i.backInterestApplied) {
-                                i.balance += i.deferredInterest;
-                                totalInterestPaid += i.deferredInterest;
-                                i.backInterestApplied = true;
-                            }
-                            let newInterest = i.balance * biWeeklyRate;
-                            i.balance += newInterest;
-                            totalInterestPaid += newInterest;
-                        }
-                    }
-                }
-
-                while (remainingItems.length > 0 && currentEscrow >= remainingItems[0].balance) {
-                    currentEscrow -= remainingItems[0].balance;
-                    remainingItems.shift(); 
-                }
-
-                if (remainingItems.length > 0) {
-                    loopDate.setDate(loopDate.getDate() + 14);
-                }
-            }
-
-            document.getElementById('resCount').innerText = paymentsMade;
-            document.getElementById('resDate').innerText = remainingItems.length === 0 ? loopDate.toLocaleDateString() : 'Never';
-            document.getElementById('resInterest').innerText = '$' + totalInterestPaid.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            document.getElementById('resCount').innerText = sim.paymentsMade;
+            document.getElementById('resDate').innerText = sim.remainingItemsLength === 0 ? sim.loopDate.toLocaleDateString() : 'Never';
+            document.getElementById('resInterest').innerText = '$' + sim.totalInterestPaid.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
         }
 
         init();
