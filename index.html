@@ -68,6 +68,12 @@
             border: 1px solid #333;
             display: none;
         }
+        .sim-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .sim-row:last-child { margin-bottom: 0; }
         
         input {
             background: #2a2a2a;
@@ -181,7 +187,15 @@
         </h2>
         
         <div class="sim-box" id="sim-box">
-            <div style="font-size: 0.85rem; color: #888; margin-bottom: 15px;">Simulate future bi-weekly payments starting 3/13/2026:</div>
+            <div style="font-size: 0.85rem; color: #888; margin-bottom: 10px;">Test adding a payment to current balance:</div>
+            <div class="sim-row">
+                <input type="text" placeholder="Date (Optional)" id="simDate1">
+                <input type="number" placeholder="Amount ($)" id="simAmount1" oninput="recalculate()">
+            </div>
+            
+            <hr style="border: 0; border-top: 1px solid #333; margin: 20px 0;">
+
+            <div style="font-size: 0.85rem; color: #888; margin-bottom: 15px;">Simulate future bi-weekly payments starting <span id="nextPaydayLabel"></span>:</div>
             <div style="margin-bottom: 20px;">
                 <input type="number" id="simPaymentInput" placeholder="Enter Bi-Weekly Amount ($)" oninput="runSimulator()">
             </div>
@@ -244,6 +258,31 @@
         let rawPayments = [];
         let totalPaymentsPlan = 24;
 
+        function getNextPayday() {
+            const baseDate = new Date(2026, 1, 27); // Feb 27, 2026
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            baseDate.setHours(0, 0, 0, 0);
+
+            const diffTime = today.getTime() - baseDate.getTime();
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+            if (diffDays <= 0) {
+                const remainder = Math.abs(diffDays) % 14;
+                const daysToNext = remainder === 0 ? 0 : remainder;
+                const nextDate = new Date(today);
+                nextDate.setDate(today.getDate() + daysToNext);
+                return nextDate;
+            } else {
+                const remainder = diffDays % 14;
+                if (remainder === 0) return today;
+                const daysToNext = 14 - remainder;
+                const nextDate = new Date(today);
+                nextDate.setDate(today.getDate() + daysToNext);
+                return nextDate;
+            }
+        }
+
         function toggleSim() {
             const box = document.getElementById('sim-box');
             const arrow = document.querySelector('.arrow-icon');
@@ -263,6 +302,8 @@
         }
 
         function init() {
+            document.getElementById('nextPaydayLabel').innerText = getNextPayday().toLocaleDateString();
+
             Papa.parse(ITEMS_CSV_URL, {
                 download: true,
                 header: true,
@@ -355,7 +396,12 @@
                 historyContainer.innerHTML = '<div style="padding:15px; color:#666; font-size:0.9rem;">No payments recorded yet.</div>';
             }
 
-            // 2. Render Items
+            // 2. Add Simulated Payment to Current Balance
+            const sim1 = cleanCurrency(document.getElementById('simAmount1').value);
+            totalCash += sim1;
+            if(sim1 > 0) paymentCount++;
+
+            // 3. Render Items
             const container = document.getElementById('items-list');
             container.innerHTML = '';
             
@@ -407,7 +453,7 @@
                 container.appendChild(div);
             });
 
-            // 3. Update Sticky Footer
+            // 4. Update Sticky Footer
             document.getElementById('footer-paid').innerText = '$' + totalCash.toLocaleString();
             document.getElementById('footer-total').innerText = '$' + grandTotalCost.toLocaleString();
             
@@ -489,10 +535,10 @@
             }
             let remainingItems = items.filter(i => !i.isPaid);
 
-            let simStartDate = new Date(2026, 2, 13);
+            let simStartDate = getNextPayday();
             let earliestPromoStart = remainingItems.length > 0 ? new Date(Math.min(...remainingItems.map(i => i.promoStart))) : simStartDate;
             
-            let loopDate = new Date(2026, 1, 27);
+            let loopDate = new Date(simStartDate);
             while (loopDate > earliestPromoStart) {
                 loopDate.setDate(loopDate.getDate() - 14);
             }
